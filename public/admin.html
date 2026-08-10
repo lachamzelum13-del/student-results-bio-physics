@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="my">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Panel</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="page admin-page">
+    <section class="card" id="loginCard">
+      <h1>Admin Login</h1>
+      <form id="loginForm" class="stack">
+        <input id="username" placeholder="Username" required />
+        <input id="password" type="password" placeholder="Password" required />
+        <button type="submit">Login</button>
+      </form>
+      <div id="loginMsg" class="message"></div>
+    </section>
+
+    <section class="card hidden" id="dashboard">
+      <div class="toolbar">
+        <div>
+          <div class="badge">Admin Panel</div>
+          <h1>အောင်စာရင်း စီမံခန့်ခွဲမှု</h1>
+        </div>
+        <button id="logoutBtn" class="secondary">Logout</button>
+      </div>
+
+      <div class="upload-box">
+        <h3>Excel / CSV Upload</h3>
+        <p>Columns:</p>
+        <code class="columns-code">admission_no, name, class, biology_marks, biology_status, physics_marks, physics_status</code>
+        <form id="uploadForm" class="search-row upload-row">
+          <input id="file" name="file" type="file" accept=".xlsx,.xls,.csv" required />
+          <button type="submit">Upload</button>
+        </form>
+        <div id="uploadMsg" class="message"></div>
+      </div>
+
+      <div class="toolbar compact">
+        <h2>ကျောင်းသားစာရင်း</h2>
+        <button id="clearBtn" class="danger">အားလုံးဖျက်မည်</button>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ကိုယ်ပိုင်နံပါတ်</th>
+              <th>အမည်</th>
+              <th>အတန်း</th>
+              <th>Biology</th>
+              <th>Biology Result</th>
+              <th>Physics</th>
+              <th>Physics Result</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const loginCard = document.getElementById('loginCard');
+    const dashboard = document.getElementById('dashboard');
+    const rows = document.getElementById('rows');
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+
+    async function checkStatus() {
+      const res = await fetch('/api/admin/status');
+      const data = await res.json();
+      if (data.loggedIn) showDashboard();
+    }
+
+    async function showDashboard() {
+      loginCard.classList.add('hidden');
+      dashboard.classList.remove('hidden');
+      await loadStudents();
+    }
+
+    async function loadStudents() {
+      const res = await fetch('/api/admin/students');
+      if (!res.ok) return;
+      const data = await res.json();
+      rows.innerHTML = data.map(s => `
+        <tr>
+          <td>${escapeHtml(s.admission_no)}</td>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${escapeHtml(s.class || '-')}</td>
+          <td>${escapeHtml(s.biology_marks ?? '-')}</td>
+          <td>${escapeHtml(s.biology_status || '-')}</td>
+          <td>${escapeHtml(s.physics_marks ?? '-')}</td>
+          <td>${escapeHtml(s.physics_status || '-')}</td>
+        </tr>
+      `).join('');
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('username').value,
+          password: document.getElementById('password').value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById('loginMsg').textContent = data.error || 'Login failed';
+        return;
+      }
+      document.getElementById('loginMsg').textContent = '';
+      showDashboard();
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await fetch('/api/admin/logout', { method: 'POST' });
+      location.reload();
+    });
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById('file');
+      if (!fileInput.files[0]) return;
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      const msg = document.getElementById('uploadMsg');
+      msg.textContent = 'Uploading...';
+      const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.textContent = data.error || 'Upload failed';
+        return;
+      }
+      msg.textContent = `Imported: ${data.imported}, Skipped: ${data.skipped}`;
+      await loadStudents();
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', async () => {
+      if (!confirm('ကျောင်းသားစာရင်းအားလုံးကို ဖျက်မှာ သေချာပါသလား?')) return;
+      const res = await fetch('/api/admin/students', { method: 'DELETE' });
+      if (res.ok) await loadStudents();
+    });
+
+    checkStatus();
+  </script>
+</body>
+</html>
