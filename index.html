@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="my">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ကျောင်းသားရလဒ် စစ်ဆေးရန်</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="page">
+    <section class="card hero">
+      <div class="badge">Student Results</div>
+      <h1>ကျောင်းသားရလဒ် စစ်ဆေးရန်</h1>
+      <p>ကိုယ်ပိုင်နံပါတ်ကို ရိုက်ထည့်ပြီး Biology နှင့် Physics ရလဒ်များကို စစ်ဆေးနိုင်ပါတယ်။</p>
+
+      <form id="searchForm" class="search-row">
+        <input id="admissionNo" autocomplete="off" placeholder="ဥပမာ - A001" required />
+        <button type="submit">ရှာဖွေမည်</button>
+      </form>
+
+      <div id="message" class="message"></div>
+
+      <div id="result" class="result hidden">
+        <div class="student-summary">
+          <div><span>ကိုယ်ပိုင်နံပါတ်</span><strong id="rAdmission"></strong></div>
+          <div><span>အမည်</span><strong id="rName"></strong></div>
+          <div><span>အတန်း</span><strong id="rClass"></strong></div>
+        </div>
+
+        <div class="subject-results">
+          <article class="subject-card">
+            <h2>Biology</h2>
+            <div class="mark-value"><span id="rBiologyMarks">-</span><small>Marks</small></div>
+            <div id="rBiologyStatus" class="subject-status">-</div>
+          </article>
+
+          <article class="subject-card">
+            <h2>Physics</h2>
+            <div class="mark-value"><span id="rPhysicsMarks">-</span><small>Marks</small></div>
+            <div id="rPhysicsStatus" class="subject-status">-</div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('searchForm');
+    const result = document.getElementById('result');
+    const message = document.getElementById('message');
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[c]));
+
+    function setStatus(el, text) {
+      const value = String(text || '-').trim();
+      el.textContent = value;
+      el.classList.remove('pass', 'fail', 'neutral');
+      const lower = value.toLowerCase();
+      if (value.includes('အောင်') || lower === 'pass' || lower === 'passed') el.classList.add('pass');
+      else if (value.includes('ကျ') || lower === 'fail' || lower === 'failed') el.classList.add('fail');
+      else el.classList.add('neutral');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const no = document.getElementById('admissionNo').value.trim();
+      result.classList.add('hidden');
+      message.textContent = 'ရှာဖွေနေပါသည်...';
+
+      try {
+        const res = await fetch('/api/result/' + encodeURIComponent(no));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Result not found');
+
+        document.getElementById('rAdmission').innerHTML = escapeHtml(data.admission_no);
+        document.getElementById('rName').innerHTML = escapeHtml(data.name);
+        document.getElementById('rClass').innerHTML = escapeHtml(data.class || '-');
+        document.getElementById('rBiologyMarks').textContent = data.biology_marks ?? '-';
+        document.getElementById('rPhysicsMarks').textContent = data.physics_marks ?? '-';
+        setStatus(document.getElementById('rBiologyStatus'), data.biology_status);
+        setStatus(document.getElementById('rPhysicsStatus'), data.physics_status);
+
+        message.textContent = '';
+        result.classList.remove('hidden');
+      } catch (err) {
+        message.textContent = 'ဒီကိုယ်ပိုင်နံပါတ်နဲ့ ရလဒ်မတွေ့ပါ။';
+      }
+    });
+  </script>
+</body>
+</html>

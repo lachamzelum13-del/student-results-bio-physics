@@ -1,0 +1,4 @@
+admission_no,name,class,biology_marks,biology_status,physics_marks,physics_status
+A001,Maung Maung,Grade 10,82,Pass,76,Pass
+A002,Su Su,Grade 10,45,Fail,68,Pass
+A003,Aung Aung,Grade 10,71,Pass,49,Fail
