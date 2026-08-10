@@ -1,0 +1,46 @@
+*{box-sizing:border-box}
+:root{--blue:#2457d6;--ink:#172033;--muted:#667085;--line:#e4e9f0;--bg:#f4f7fb}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans Myanmar","Myanmar Text",sans-serif;background:var(--bg);color:var(--ink)}
+.page{min-height:100vh;display:grid;place-items:center;padding:24px}
+.card{width:min(860px,100%);background:#fff;border-radius:22px;padding:32px;box-shadow:0 20px 60px rgba(30,50,90,.12)}
+.hero{text-align:center}
+.badge{display:inline-block;background:#eaf1ff;color:var(--blue);padding:6px 10px;border-radius:999px;font-size:13px;font-weight:700}
+h1{margin:14px 0 8px;font-size:clamp(26px,5vw,42px)}
+h2{margin:0}
+p{color:var(--muted)}
+.search-row{display:flex;gap:10px;margin-top:24px}
+.search-row input{flex:1}
+.stack{display:grid;gap:12px}
+.stack input,.search-row input{padding:14px 16px;border:1px solid #d6dce6;border-radius:12px;font-size:16px;background:#fff}
+button{border:0;border-radius:12px;padding:14px 18px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(.96)}
+.secondary{background:#e8edf5;color:var(--ink)}
+.danger{background:#b42318}
+.message{margin-top:14px;color:#b42318;font-weight:600}
+.result{margin-top:28px;text-align:left;border-top:1px solid #edf0f5;padding-top:22px}
+.student-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.student-summary div{padding:14px;background:#f8fafc;border-radius:12px}
+.student-summary span{display:block;color:var(--muted);font-size:13px;margin-bottom:4px}
+.subject-results{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+.subject-card{border:1px solid var(--line);border-radius:18px;padding:22px;text-align:center;background:#fff}
+.subject-card h2{font-size:22px}
+.mark-value{display:flex;justify-content:center;align-items:baseline;gap:7px;margin:18px 0 12px}
+.mark-value span{font-size:44px;font-weight:800;color:var(--blue);line-height:1}
+.mark-value small{color:var(--muted)}
+.subject-status{padding:12px;border-radius:12px;font-weight:800}
+.pass{background:#ecfdf3;color:#027a48}
+.fail{background:#fef3f2;color:#b42318}
+.neutral{background:#f2f4f7;color:#475467}
+.hidden{display:none!important}
+.admin-page{align-items:start}
+.toolbar{display:flex;justify-content:space-between;gap:16px;align-items:center}
+.toolbar.compact{margin-top:26px}
+.upload-box{margin-top:22px;padding:20px;background:#f8fafc;border-radius:16px}
+.columns-code{display:block;overflow:auto;white-space:nowrap;padding:10px;margin-top:8px}
+.upload-row{align-items:center}
+.table-wrap{overflow:auto;margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:920px}
+th,td{padding:12px;border-bottom:1px solid #edf0f5;text-align:left;white-space:nowrap}
+th{color:#344054;background:#fafbfc;position:sticky;top:0}
+code{background:#eef2f6;padding:2px 6px;border-radius:6px}
+@media(max-width:700px){.card{padding:22px}.search-row,.toolbar{flex-direction:column;align-items:stretch}.student-summary,.subject-results{grid-template-columns:1fr}.mark-value span{font-size:38px}}
