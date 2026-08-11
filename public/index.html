@@ -88,15 +88,45 @@
 const physicsAnswerBtn = document.getElementById('physicsAnswerBtn');
 
 if (data.has_biology_answer) {
-  biologyAnswerBtn.href = '/api/answer-sheet/' + encodeURIComponent(no) + '/biology';
   biologyAnswerBtn.classList.remove('hidden');
+  biologyAnswerBtn.onclick = async (e) => {
+    e.preventDefault();
+
+    const res = await fetch(
+      '/api/answer-sheet/' + encodeURIComponent(no) + '/biology'
+    );
+
+    const answer = await res.json();
+
+    if (!res.ok || !answer.url) {
+      alert(answer.error || 'Answer sheet not found');
+      return;
+    }
+
+    window.open(answer.url, '_blank');
+  };
 } else {
   biologyAnswerBtn.classList.add('hidden');
 }
 
 if (data.has_physics_answer) {
-  physicsAnswerBtn.href = '/api/answer-sheet/' + encodeURIComponent(no) + '/physics';
   physicsAnswerBtn.classList.remove('hidden');
+  physicsAnswerBtn.onclick = async (e) => {
+    e.preventDefault();
+
+    const res = await fetch(
+      '/api/answer-sheet/' + encodeURIComponent(no) + '/physics'
+    );
+
+    const answer = await res.json();
+
+    if (!res.ok || !answer.url) {
+      alert(answer.error || 'Answer sheet not found');
+      return;
+    }
+
+    window.open(answer.url, '_blank');
+  };
 } else {
   physicsAnswerBtn.classList.add('hidden');
 }
