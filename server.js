@@ -164,7 +164,15 @@ async function createSignedUrl(objectPath) {
   if (!response.ok || !data.signedURL) {
     throw new Error(data.message || data.error || 'Could not create answer-sheet link');
   }
-  return data.signedURL.startsWith('http') ? data.signedURL : `${SUPABASE_URL}${data.signedURL}`;
+  if (data.signedURL.startsWith('http')) {
+  return data.signedURL;
+}
+
+if (data.signedURL.startsWith('/storage/v1/')) {
+  return `${SUPABASE_URL}${data.signedURL}`;
+}
+
+return `${SUPABASE_URL}/storage/v1${data.signedURL.startsWith('/') ? '' : '/'}${data.signedURL}`;
 }
 
 function extensionFor(file) {
