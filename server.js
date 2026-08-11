@@ -28,6 +28,9 @@ const PORT = process.env.PORT || 3000;
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'admin123';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-this-secret-in-production';
+const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
+const ANSWER_BUCKET = 'answer-sheets';
 
 if (!process.env.DATABASE_URL) {
   console.error('Missing DATABASE_URL. Add your Supabase PostgreSQL connection string.');
@@ -44,7 +47,6 @@ const pool = new Pool({
 });
 
 async function initDb() {
-  // Keep the existing table and migrate it safely so the current Supabase project can be reused.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS students (
       id BIGSERIAL PRIMARY KEY,
@@ -59,6 +61,8 @@ async function initDb() {
   await pool.query('ALTER TABLE students ADD COLUMN IF NOT EXISTS biology_status TEXT');
   await pool.query('ALTER TABLE students ADD COLUMN IF NOT EXISTS physics_marks NUMERIC');
   await pool.query('ALTER TABLE students ADD COLUMN IF NOT EXISTS physics_status TEXT');
+  await pool.query('ALTER TABLE students ADD COLUMN IF NOT EXISTS biology_answer_path TEXT');
+  await pool.query('ALTER TABLE students ADD COLUMN IF NOT EXISTS physics_answer_path TEXT');
   await pool.query('CREATE INDEX IF NOT EXISTS idx_students_admission_no ON students(admission_no)');
 }
 
@@ -85,9 +89,88 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
+const answerUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!allowed.includes(file.mimetype)) {
+      return cb(new Error('Only PDF, JPG and PNG files are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
 function requireAdmin(req, res, next) {
   if (req.session.admin) return next();
   return res.status(401).json({ error: 'Unauthorized' });
+}
+
+function ensureStorageConfig() {
+  if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
+    const err = new Error('Supabase Storage is not configured');
+    err.statusCode = 500;
+    throw err;
+  }
+}
+
+function storageHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_SECRET_KEY,
+    Authorization: `Bearer ${SUPABASE_SECRET_KEY}`,
+    ...extra
+  };
+}
+
+function encodeStoragePath(objectPath) {
+  return objectPath.split('/').map(encodeURIComponent).join('/');
+}
+
+async function uploadToStorage(objectPath, file) {
+  ensureStorageConfig();
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(ANSWER_BUCKET)}/${encodeStoragePath(objectPath)}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: storageHeaders({
+      'Content-Type': file.mimetype,
+      'x-upsert': 'true'
+    }),
+    body: file.buffer
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Storage upload failed: ${detail || response.status}`);
+  }
+}
+
+async function deleteFromStorage(objectPath) {
+  if (!objectPath || !SUPABASE_URL || !SUPABASE_SECRET_KEY) return;
+  const url = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(ANSWER_BUCKET)}/${encodeStoragePath(objectPath)}`;
+  try {
+    await fetch(url, { method: 'DELETE', headers: storageHeaders() });
+  } catch (_) {}
+}
+
+async function createSignedUrl(objectPath) {
+  ensureStorageConfig();
+  const url = `${SUPABASE_URL}/storage/v1/object/sign/${encodeURIComponent(ANSWER_BUCKET)}/${encodeStoragePath(objectPath)}`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: storageHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ expiresIn: 300 })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.signedURL) {
+    throw new Error(data.message || data.error || 'Could not create answer-sheet link');
+  }
+  return data.signedURL.startsWith('http') ? data.signedURL : `${SUPABASE_URL}${data.signedURL}`;
+}
+
+function extensionFor(file) {
+  if (file.mimetype === 'application/pdf') return 'pdf';
+  if (file.mimetype === 'image/png') return 'png';
+  return 'jpg';
 }
 
 app.get('/health', async (_req, res) => {
@@ -105,17 +188,51 @@ app.get('/api/result/:admissionNo', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT admission_no, name, class,
              biology_marks, biology_status,
-             physics_marks, physics_status
+             physics_marks, physics_status,
+             biology_answer_path, physics_answer_path
       FROM students
       WHERE admission_no = $1
       LIMIT 1
     `, [admissionNo]);
 
     if (!rows[0]) return res.status(404).json({ error: 'Result not found' });
-    return res.json(rows[0]);
+    const row = rows[0];
+    return res.json({
+      admission_no: row.admission_no,
+      name: row.name,
+      class: row.class,
+      biology_marks: row.biology_marks,
+      biology_status: row.biology_status,
+      physics_marks: row.physics_marks,
+      physics_status: row.physics_status,
+      has_biology_answer: !!row.biology_answer_path,
+      has_physics_answer: !!row.physics_answer_path
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
+  }
+});
+
+app.get('/api/answer-sheet/:admissionNo/:subject', async (req, res) => {
+  try {
+    const admissionNo = String(req.params.admissionNo || '').trim();
+    const subject = String(req.params.subject || '').toLowerCase();
+    if (!['biology', 'physics'].includes(subject)) {
+      return res.status(400).json({ error: 'Invalid subject' });
+    }
+
+    const column = subject === 'biology' ? 'biology_answer_path' : 'physics_answer_path';
+    const { rows } = await pool.query(`SELECT ${column} AS object_path FROM students WHERE admission_no = $1 LIMIT 1`, [admissionNo]);
+    if (!rows[0] || !rows[0].object_path) {
+      return res.status(404).json({ error: 'Answer sheet not found' });
+    }
+
+    const url = await createSignedUrl(rows[0].object_path);
+    return res.json({ url, expiresIn: 300 });
+  } catch (err) {
+    console.error(err);
+    return res.status(err.statusCode || 500).json({ error: err.message || 'Could not open answer sheet' });
   }
 });
 
@@ -142,11 +259,18 @@ app.get('/api/admin/students', requireAdmin, async (_req, res) => {
       SELECT admission_no, name, class,
              biology_marks, biology_status,
              physics_marks, physics_status,
+             biology_answer_path, physics_answer_path,
              updated_at
       FROM students
       ORDER BY admission_no
     `);
-    return res.json(rows);
+    return res.json(rows.map(row => ({
+      ...row,
+      has_biology_answer: !!row.biology_answer_path,
+      has_physics_answer: !!row.physics_answer_path,
+      biology_answer_path: undefined,
+      physics_answer_path: undefined
+    })));
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Database error' });
@@ -155,6 +279,11 @@ app.get('/api/admin/students', requireAdmin, async (_req, res) => {
 
 app.delete('/api/admin/students', requireAdmin, async (_req, res) => {
   try {
+    const { rows } = await pool.query('SELECT biology_answer_path, physics_answer_path FROM students');
+    for (const row of rows) {
+      await deleteFromStorage(row.biology_answer_path);
+      await deleteFromStorage(row.physics_answer_path);
+    }
     const result = await pool.query('DELETE FROM students');
     return res.json({ ok: true, deleted: result.rowCount });
   } catch (err) {
@@ -168,9 +297,7 @@ app.post('/api/admin/upload', requireAdmin, upload.single('file'), async (req, r
 
   const get = (row, keys) => {
     for (const key of keys) {
-      if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined && row[key] !== null) {
-        return row[key];
-      }
+      if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined && row[key] !== null) return row[key];
     }
     return '';
   };
@@ -253,6 +380,49 @@ app.post('/api/admin/upload', requireAdmin, upload.single('file'), async (req, r
   } finally {
     if (client) client.release();
     try { fs.unlinkSync(req.file.path); } catch (_) {}
+  }
+});
+
+app.post('/api/admin/answer-sheet/:admissionNo/:subject', requireAdmin, answerUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No answer sheet uploaded' });
+    const admissionNo = String(req.params.admissionNo || '').trim();
+    const subject = String(req.params.subject || '').toLowerCase();
+    if (!['biology', 'physics'].includes(subject)) {
+      return res.status(400).json({ error: 'Invalid subject' });
+    }
+
+    const column = subject === 'biology' ? 'biology_answer_path' : 'physics_answer_path';
+    const { rows } = await pool.query(`SELECT ${column} AS old_path FROM students WHERE admission_no = $1 LIMIT 1`, [admissionNo]);
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+
+    const safeAdmission = admissionNo.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const objectPath = `${safeAdmission}/${subject}-${Date.now()}.${extensionFor(req.file)}`;
+    await uploadToStorage(objectPath, req.file);
+    await pool.query(`UPDATE students SET ${column} = $1, updated_at = NOW() WHERE admission_no = $2`, [objectPath, admissionNo]);
+    await deleteFromStorage(rows[0].old_path);
+
+    return res.json({ ok: true, subject, admission_no: admissionNo });
+  } catch (err) {
+    console.error(err);
+    return res.status(err.statusCode || 500).json({ error: err.message || 'Answer sheet upload failed' });
+  }
+});
+
+app.delete('/api/admin/answer-sheet/:admissionNo/:subject', requireAdmin, async (req, res) => {
+  try {
+    const admissionNo = String(req.params.admissionNo || '').trim();
+    const subject = String(req.params.subject || '').toLowerCase();
+    if (!['biology', 'physics'].includes(subject)) return res.status(400).json({ error: 'Invalid subject' });
+    const column = subject === 'biology' ? 'biology_answer_path' : 'physics_answer_path';
+    const { rows } = await pool.query(`SELECT ${column} AS object_path FROM students WHERE admission_no = $1 LIMIT 1`, [admissionNo]);
+    if (!rows[0]) return res.status(404).json({ error: 'Student not found' });
+    await deleteFromStorage(rows[0].object_path);
+    await pool.query(`UPDATE students SET ${column} = NULL, updated_at = NOW() WHERE admission_no = $1`, [admissionNo]);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: err.message || 'Could not delete answer sheet' });
   }
 });
 
