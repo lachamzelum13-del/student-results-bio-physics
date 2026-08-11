@@ -32,12 +32,14 @@
             <h2>Biology</h2>
             <div class="mark-value"><span id="rBiologyMarks">-</span><small>Marks</small></div>
             <div id="rBiologyStatus" class="subject-status">-</div>
+            <a id="biologyAnswerBtn" class="answer-sheet-btn hidden" href="#" target="_blank">Biology အဖြေလွှာကြည့်ရန်</a>
           </article>
 
           <article class="subject-card">
             <h2>Physics</h2>
             <div class="mark-value"><span id="rPhysicsMarks">-</span><small>Marks</small></div>
             <div id="rPhysicsStatus" class="subject-status">-</div>
+            <a id="physicsAnswerBtn" class="answer-sheet-btn hidden" href="#" target="_blank">Physics အဖြေလွှာကြည့်ရန်</a>
           </article>
         </div>
       </div>
@@ -81,6 +83,23 @@
         document.getElementById('rPhysicsMarks').textContent = data.physics_marks ?? '-';
         setStatus(document.getElementById('rBiologyStatus'), data.biology_status);
         setStatus(document.getElementById('rPhysicsStatus'), data.physics_status);
+
+        const biologyAnswerBtn = document.getElementById('biologyAnswerBtn');
+const physicsAnswerBtn = document.getElementById('physicsAnswerBtn');
+
+if (data.has_biology_answer) {
+  biologyAnswerBtn.href = '/api/answer-sheet/' + encodeURIComponent(no) + '/biology';
+  biologyAnswerBtn.classList.remove('hidden');
+} else {
+  biologyAnswerBtn.classList.add('hidden');
+}
+
+if (data.has_physics_answer) {
+  physicsAnswerBtn.href = '/api/answer-sheet/' + encodeURIComponent(no) + '/physics';
+  physicsAnswerBtn.classList.remove('hidden');
+} else {
+  physicsAnswerBtn.classList.add('hidden');
+}
 
         message.textContent = '';
         result.classList.remove('hidden');
