@@ -38,6 +38,21 @@
         <div id="uploadMsg" class="message"></div>
       </div>
 
+      <div class="upload-box answer-upload-box">
+        <h3>အဖြေလွှာ Upload</h3>
+        <p>PDF, JPG, PNG — ကျောင်းသားတစ်ယောက်နှင့် ဘာသာတစ်ခုစီအလိုက် တင်ပါ။</p>
+        <form id="answerForm" class="answer-upload-row">
+          <input id="answerAdmission" placeholder="ကိုယ်ပိုင်နံပါတ် (ဥပမာ A001)" required />
+          <select id="answerSubject" required>
+            <option value="biology">Biology</option>
+            <option value="physics">Physics</option>
+          </select>
+          <input id="answerFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" required />
+          <button type="submit">အဖြေလွှာတင်မည်</button>
+        </form>
+        <div id="answerUploadMsg" class="message"></div>
+      </div>
+
       <div class="toolbar compact">
         <h2>ကျောင်းသားစာရင်း</h2>
         <button id="clearBtn" class="danger">အားလုံးဖျက်မည်</button>
@@ -52,8 +67,10 @@
               <th>အတန်း</th>
               <th>Biology</th>
               <th>Biology Result</th>
+              <th>Biology Sheet</th>
               <th>Physics</th>
               <th>Physics Result</th>
+              <th>Physics Sheet</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -94,8 +111,10 @@
           <td>${escapeHtml(s.class || '-')}</td>
           <td>${escapeHtml(s.biology_marks ?? '-')}</td>
           <td>${escapeHtml(s.biology_status || '-')}</td>
+          <td>${s.has_biology_answer ? '<span class="sheet-ok">ရှိ</span>' : '<span class="sheet-none">မရှိ</span>'}</td>
           <td>${escapeHtml(s.physics_marks ?? '-')}</td>
           <td>${escapeHtml(s.physics_status || '-')}</td>
+          <td>${s.has_physics_answer ? '<span class="sheet-ok">ရှိ</span>' : '<span class="sheet-none">မရှိ</span>'}</td>
         </tr>
       `).join('');
     }
@@ -142,8 +161,33 @@
       await loadStudents();
     });
 
+    document.getElementById('answerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const admissionNo = document.getElementById('answerAdmission').value.trim();
+      const subject = document.getElementById('answerSubject').value;
+      const file = document.getElementById('answerFile').files[0];
+      const msg = document.getElementById('answerUploadMsg');
+      if (!admissionNo || !file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      msg.textContent = 'အဖြေလွှာတင်နေပါသည်...';
+      const res = await fetch(`/api/admin/answer-sheet/${encodeURIComponent(admissionNo)}/${subject}`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.textContent = data.error || 'အဖြေလွှာတင်၍မရပါ။';
+        return;
+      }
+      msg.textContent = `${admissionNo} - ${subject === 'biology' ? 'Biology' : 'Physics'} အဖြေလွှာတင်ပြီးပါပြီ။`;
+      document.getElementById('answerFile').value = '';
+      await loadStudents();
+    });
+
     document.getElementById('clearBtn').addEventListener('click', async () => {
-      if (!confirm('ကျောင်းသားစာရင်းအားလုံးကို ဖျက်မှာ သေချာပါသလား?')) return;
+      if (!confirm('ကျောင်းသားစာရင်းနှင့် ချိတ်ထားသော အဖြေလွှာများအားလုံးကို ဖျက်မှာ သေချာပါသလား?')) return;
       const res = await fetch('/api/admin/students', { method: 'DELETE' });
       if (res.ok) await loadStudents();
     });
